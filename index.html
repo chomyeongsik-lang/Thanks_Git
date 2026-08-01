@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily English Writing Practice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h1 { color: #2c3e50; text-align: center; }
+        .date { text-align: center; color: #7f8c8d; margin-bottom: 20px; }
+        .api-box {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #d0e3f0;
+        }
+        .api-box input {
+            width: 70%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        textarea {
+            width: 100%; height: 200px; padding: 15px;
+            border: 1px solid #ccc; border-radius: 8px;
+            font-size: 16px; resize: vertical; box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db; color: white; border: none;
+            padding: 12px 20px; font-size: 16px; border-radius: 5px;
+            cursor: pointer; margin-top: 10px; margin-right: 10px;
+        }
+        button:hover { background-color: #2980b9; }
+        button.loading { background-color: #95a5a6; cursor: not-allowed; }
+        .output-section {
+            margin-top: 30px; background: #fff; padding: 20px;
+            border-radius: 8px; border: 1px solid #e1e1e1;
+        }
+        .feedback-content {
+            white-space: pre-wrap; word-wrap: break-word;
+            background: #f1f2f6; padding: 15px; border-radius: 5px;
+            line-height: 1.6; font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Daily English Writing</h1>
+    <div class="date" id="current-date"></div>
+
+    <!-- API 키 입력 창 (로컬 브라우저에 안전하게 저장됨) -->
+    <div class="api-box">
+        <label for="api-key">🔑 Gemini API Key: </label>
+        <input type="password" id="api-key" placeholder="AIZAzy..." onchange="saveApiKey()">
+        <small style="display:block; margin-top:5px; color:#555;">* API 키는 본인 브라우저에만 저장되며 외부로 유출되지 않습니다.</small>
+    </div>
+
+    <textarea id="english-input" placeholder="Write your daily journal or thoughts in English here..."></textarea>
+    
+    <br>
+    <button id="action-btn" onclick="processDiary()">Save & Check with Gemini</button>
+
+    <div class="output-section" id="feedback-box" style="display:none;">
+        <h3>✨ Gemini의 검토 의견</h3>
+        <div class="feedback-content" id="feedback-text"></div>
+    </div>
+
+    <script>
+        const today = new Date();
+        document.getElementById('current-date').innerText = today.toDateString();
+
+        const dateStr = today.toISOString().split('T')[0];
+        const storageKey = 'english_diary_' + dateStr;
+        const feedbackKey = 'english_feedback_' + dateStr;
+
+        // 페이지 로드 시 기존 데이터 및 API 키 불러오기
+        window.onload = function() {
+            if (localStorage.getItem('gemini_api_key')) {
+                document.getElementById('api-key').value = localStorage.getItem('gemini_api_key');
+            }
+            if (localStorage.getItem(storageKey)) {
+                document.getElementById('english-input').value = localStorage.getItem(storageKey);
+            }
+            if (localStorage.getItem(feedbackKey)) {
+                showFeedback(localStorage.getItem(feedbackKey));
+            }
+        };
+
+        function saveApiKey() {
+            const key = document.getElementById('api-key').value;
+            localStorage.setItem('gemini_api_key', key);
+        }
+
+        // 결과 화면 표시 함수
+        function showFeedback(text) {
+            document.getElementById('feedback-text').innerText = text;
+            document.getElementById('feedback-box').style.display = 'block';
+        }
+
+        // 메인 실행 함수 (저장 + 검토 요청)
+        async function processDiary() {
+            const text = document.getElementById('english-input').value;
+            const apiKey = document.getElementById('api-key').value;
+            const btn = document.getElementById('action-btn');
+
+            if (!text.trim()) {
+                alert('내용을 입력해 주세요!');
+                return;
+            }
+            if (!apiKey.trim()) {
+                alert('Gemini API 키를 먼저 입력해 주세요!');
+                return;
+            }
+
+            // 1. 일기 로컬 저장
+            localStorage.setItem(storageKey, text);
+            
+            // 버튼 상태 대기중으로 변경
+            btn.innerText = "Gemini 검토 중...";
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            // 2. Gemini API 호출
+            const prompt = `Please review and correct the following English writing. 
+1. Fix any grammar, spelling, or unnatural expressions.
+2. Provide a natural, native-like alternative version.
+3. Briefly explain the major mistakes in Korean.
+
+My writing:
+"""
+${text}
+"""`;
+
+            try {
+                // Gemini Pro 모델 API 호출 주소
+                const url = `https://googleapis.com{apiKey}`;
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.candidates && data.candidates[0].content.parts[0].text) {
+                    const resultText = data.candidates[0].content.parts[0].text;
+                    
+                    // 검토 결과 로컬 저장 및 출력
+                    localStorage.setItem(feedbackKey, resultText);
+                    showFeedback(resultText);
+                    alert('저장 및 Gemini 검토 완료!');
+                } else {
+                    alert('Gemini 응답을 처리하지 못했습니다. API 키나 네트워크를 확인하세요.');
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert('오류가 발생했습니다: ' + error.message);
+            } finally {
+                // 버튼 상태 복구
+                btn.innerText = "Save & Check with Gemini";
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
